@@ -113,12 +113,14 @@ class MapViewController: UIViewController, MKMapViewDelegate, NSFetchedResultsCo
     func mapSetUp()
     {
         // Read defaults
-        let center = CLLocationCoordinate2D(latitude: defaults.doubleForKey("latitude"), longitude: defaults.doubleForKey("longitude"))
-        let span = MKCoordinateSpan(latitudeDelta: defaults.doubleForKey("latitudeDelta"), longitudeDelta: defaults.doubleForKey("longitudeDelta"))
-        let region = MKCoordinateRegionMake(center, span)
-        
-        mapView.setRegion(region, animated: true)
-        mapView.centerCoordinate = center
+        if defaults.boolForKey("defaultsAvailable") {
+            let center = CLLocationCoordinate2D(latitude: defaults.doubleForKey("latitude"), longitude: defaults.doubleForKey("longitude"))
+            let span = MKCoordinateSpan(latitudeDelta: defaults.doubleForKey("latitudeDelta"), longitudeDelta: defaults.doubleForKey("longitudeDelta"))
+            let region = MKCoordinateRegionMake(center, span)
+            
+            mapView.setRegion(region, animated: true)
+            mapView.centerCoordinate = center
+        }
     }
     
     func setUpUI()
@@ -298,6 +300,7 @@ class MapViewController: UIViewController, MKMapViewDelegate, NSFetchedResultsCo
     func mapView(mapView: MKMapView, regionDidChangeAnimated animated: Bool)
     {
         // Set defaults
+        defaults.setBool(true, forKey: "defaultsAvailable")
         defaults.setDouble(mapView.region.span.latitudeDelta, forKey: "latitudeDelta")
         defaults.setDouble(mapView.region.span.longitudeDelta, forKey: "longitudeDelta")
         defaults.setDouble(mapView.region.center.latitude, forKey: "latitude")
