@@ -39,7 +39,9 @@
                             <constraint firstItem="jff-81-2ot" firstAttribute="centerY" secondItem="sha-RX-0H1" secondAttribute="centerY" id="chL-ws-NfJ"/>
                         </constraints>
                     </view>
-                    <navigationItem key="navigationItem" title="Virtual Tourist" id="hYX-zj-da3"/>
+                    <navigationItem key="navigationItem" title="Virtual Tourist" id="hYX-zj-da3">
+                        <barButtonItem key="backBarButtonItem" title=" " id="WRS-rO-0Oo"/>
+                    </navigationItem>
                     <connections>
                         <outlet property="activityIndicator" destination="jff-81-2ot" id="9el-mX-BIk"/>
                         <outlet property="mapView" destination="sha-RX-0H1" id="veE-gC-uFd"/>
@@ -131,7 +133,9 @@
                             <constraint firstAttribute="trailingMargin" secondItem="1q3-JO-sxm" secondAttribute="trailing" constant="-20" id="s7a-lF-tB6"/>
                         </constraints>
                     </view>
-                    <navigationItem key="navigationItem" title="Title" id="rX1-qh-Wo8"/>
+                    <navigationItem key="navigationItem" title="Title" id="rX1-qh-Wo8">
+                        <barButtonItem key="backBarButtonItem" title=" " id="KZ8-iI-imB"/>
+                    </navigationItem>
                     <simulatedNavigationBarMetrics key="simulatedTopBarMetrics" prompted="NO"/>
                     <connections>
                         <outlet property="collectionView" destination="1q3-JO-sxm" id="mJ0-g8-Sxf"/>
@@ -162,4 +166,5 @@
             <point key="canvasLocation" x="440" y="429"/>
         </scene>
     </scenes>
+    <color key="tintColor" red="1" green="1" blue="1" alpha="1" colorSpace="calibratedRGB"/>
 </document>

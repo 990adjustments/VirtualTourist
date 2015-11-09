@@ -66,16 +66,12 @@ class PhotoAlbumViewController: UIViewController, UICollectionViewDataSource, UI
     {
         super.viewDidLoad()
         
+        client = Client.sharedInstance()
+        
         let _ = fetchObjects() as! [Photo]
         
         setupUI()
         mapSetup()
-        
-        // If Pin does not have images stored on disk
-        // download data from network
-        if pin.photos!.count == 0 {
-            getFlickrPhotos()
-        }
     }
     
     override func viewWillAppear(animated: Bool)
@@ -160,51 +156,8 @@ class PhotoAlbumViewController: UIViewController, UICollectionViewDataSource, UI
         return photos
     }
     
-    func getFlickrPhotos()
+    override func setEditing(editing: Bool, animated: Bool)
     {
-        // Retrieve photos from Flickr
-        client = Client.sharedInstance()
-        
-        // Get a random radius to search
-        let randomRadius = Int(arc4random_uniform(10) + 1)
-        
-        let urlString = "\(Client.methods.FLICKR_BASE_URL)?method=\(Client.methods.METHOD_NAME)&api_key=\(Client.parameters.API_KEY)&format=\(Client.parameters.DATA_FORMAT)&has_geo=\(Client.parameters.HAS_GEO)&lat=\(lat!)&lon=\(lon!)&extras=\(Client.parameters.EXTRAS)&nojsoncallback=\(Client.parameters.NO_JSON_CALLBACK)&per_page=\(Client.parameters.PER_PAGE)&radius=\(randomRadius)&radius_units=\(Client.parameters.RADIUS_UNITS)&accuracy=\(Client.parameters.ACCURACY)&min_taken_date=\(Client.parameters.MIN_DATE)"
-        
-        let escapedURLString = urlString.stringByAddingPercentEncodingWithAllowedCharacters(NSCharacterSet.URLQueryAllowedCharacterSet())
-        
-        client.getFlickrPhotos(escapedURLString!, completionHandler: { (flickrResults, error) -> () in
-            if let err = error {
-                self.retryAlert(err.localizedDescription, completionHandler: { (Bool) -> () in
-                    if Bool {
-                        self.getFlickrPhotos()
-                    }
-                    else {
-                        return
-                    }
-                })
-            }
-            
-            if let flickrPhotos = flickrResults {
-                if let photosDict = flickrPhotos.valueForKey("photos") as? NSDictionary {
-                    if let photoArrayDict = photosDict.valueForKey("photo") as? [[String:AnyObject]] {
-                        let _ = photoArrayDict.map() { (dictionary: [String : AnyObject]) -> Photo in
-                            // Creat Photo entity
-                            let photo = Photo(dictionary: dictionary, context: self.sharedContext)
-                            photo.pin = self.pin
-                            
-                            return photo
-                        }
-                        
-                        CoreDataStack.sharedInstance().saveContext()
-                        
-                        let _ = self.fetchObjects()
-                    }
-                }
-            }
-        })
-    }
-    
-    override func setEditing(editing: Bool, animated: Bool) {
         super.setEditing(editing, animated: animated)
         
         if editing {
@@ -243,42 +196,20 @@ class PhotoAlbumViewController: UIViewController, UICollectionViewDataSource, UI
     func deleteImagesAtIndexPath()
     {
         var photosToDelete = [Photo]()
-        var success = false
         
         for indexPath in selectedIndexes {
             photosToDelete.append(fetchedResultsController.objectAtIndexPath(indexPath) as! Photo)
         }
         
         for i in photosToDelete {
-            //print("DELETING PHOTO WITH ID: \(i.id!)")
-            
-            let results = Utilities.imageCleanup(i.id!)
-            
-            if (results.0) {
-                sharedContext.deleteObject(i)
-                success = true
-            }
-            else {
-                // Error deleting image on disk
-                success = false
-                retryAlert(results.1, completionHandler: { (Bool) -> () in
-                    if Bool {
-                        self.deleteImagesAtIndexPath()
-                    }
-                    else {
-                        return
-                    }
-                })
-            }
-        }
-        
-        if success {
-            selectedIndexes = [NSIndexPath]()
+            sharedContext.deleteObject(i)
             
             CoreDataStack.sharedInstance().saveContext()
-
-            navigationItem.title = "Select images"
         }
+        
+        selectedIndexes = [NSIndexPath]()
+        
+        navigationItem.title = "Select images"
     }
     
     func refreshCollection()
@@ -289,8 +220,16 @@ class PhotoAlbumViewController: UIViewController, UICollectionViewDataSource, UI
             let _ = Utilities.imageCleanup(i.id!)
             sharedContext.deleteObject(i)
         }
-        
-        getFlickrPhotos()
+
+        self.client.getFlickrData(pin) { (errorstring) -> () in
+            //print(NSThread.isMainThread())
+            
+            let _ = self.fetchObjects()
+            
+            dispatch_async(dispatch_get_main_queue()) { () -> Void in
+                self.collectionView.reloadData()
+            }
+        }
     }
     
     func retryAlert(error:String?, completionHandler:(Bool) -> ())
@@ -348,7 +287,7 @@ class PhotoAlbumViewController: UIViewController, UICollectionViewDataSource, UI
         }
         else {
             let colorview = UIView()
-            colorview.backgroundColor = UIColor(red: 1.0, green: 35.0/255, blue: 70.0/255, alpha: 1.0)
+            colorview.backgroundColor = NAV_COLOR
             collectionView.backgroundView = colorview
         }
         
@@ -367,8 +306,9 @@ class PhotoAlbumViewController: UIViewController, UICollectionViewDataSource, UI
         return cell
     }
     
-    func configureCell(cell: PhotoCollectionViewCell, indexPath:NSIndexPath) {
-        let photo = self.fetchedResultsController.objectAtIndexPath(indexPath) as? Photo
+    func configureCell(cell: PhotoCollectionViewCell, indexPath:NSIndexPath)
+    {
+        let photo = fetchedResultsController.objectAtIndexPath(indexPath) as? Photo
     
         cell.activityIndicator.startAnimating()
     
@@ -385,12 +325,28 @@ class PhotoAlbumViewController: UIViewController, UICollectionViewDataSource, UI
         }
         else {
             // File is not on disk, so download from network
-            dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_HIGH, 0)) { () -> Void in
-                if let imageUrlString = photo?.imageUrl {
+            // First create a background context for long operation
+            var temporaryContext: NSManagedObjectContext!
+            temporaryContext = NSManagedObjectContext(concurrencyType: NSManagedObjectContextConcurrencyType.PrivateQueueConcurrencyType)
+            temporaryContext.persistentStoreCoordinator = self.sharedContext.persistentStoreCoordinator
+            
+            temporaryContext.performBlock({ () -> Void in
+                //print(NSThread.isMainThread())
+                
+                var mo: Photo!
+                
+                do {
+                    mo = try temporaryContext.existingObjectWithID((photo?.objectID)!) as! Photo
+                }
+                catch {
+                    print(error)
+                }
+                
+                if let imageUrlString = mo!.imageUrl {
                     if let imageUrl = NSURL(string: imageUrlString) {
                         if let imageData = NSData(contentsOfURL: imageUrl) {
                             // Save data to disk
-                            photo?.savePathUrl(photo!.id!)
+                            mo?.savePathUrl(mo!.id!)
                             
                             dispatch_async(dispatch_get_main_queue(), { () -> Void in
                                 cell.photoCell.image = UIImage(data: imageData)
@@ -399,7 +355,7 @@ class PhotoAlbumViewController: UIViewController, UICollectionViewDataSource, UI
                         }
                     }
                 }
-            }
+            })
         }
     }
 
@@ -408,7 +364,7 @@ class PhotoAlbumViewController: UIViewController, UICollectionViewDataSource, UI
         let cell = collectionView.cellForItemAtIndexPath(indexPath) as! PhotoCollectionViewCell
         
         if editing {
-            print(cell.highlighted)
+            //print(cell.highlighted)
             let containsIndexPath = selectedIndexes.contains(indexPath)
             
             if !containsIndexPath {

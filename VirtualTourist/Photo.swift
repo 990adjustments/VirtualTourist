@@ -57,4 +57,8 @@ class Photo: NSManagedObject {
         
         return path
     }
+    
+    override func prepareForDeletion() {
+        let _ = Utilities.imageCleanup(id!)
+    }
 }
