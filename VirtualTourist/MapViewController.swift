@@ -81,8 +81,7 @@ class MapViewController: UIViewController, MKMapViewDelegate, NSFetchedResultsCo
     override func viewDidLoad()
     {
         super.viewDidLoad()
-        
-        startLocationUpdates()
+
         client = Client.sharedInstance()
         
         mapSetUp()
@@ -120,6 +119,9 @@ class MapViewController: UIViewController, MKMapViewDelegate, NSFetchedResultsCo
             
             mapView.setRegion(region, animated: true)
             mapView.centerCoordinate = center
+        }
+        else {
+            startLocationUpdates()
         }
     }
     
